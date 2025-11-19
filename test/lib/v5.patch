@@ -1,0 +1,330 @@
+Subject: [PATCH] v5
+v4
+v3
+fix intellij warning
+fix modal not show
+---
+Index: aloha/aloha-query-ssr/www/WEB-INF/templates/registerTree.html
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/aloha/aloha-query-ssr/www/WEB-INF/templates/registerTree.html b/aloha/aloha-query-ssr/www/WEB-INF/templates/registerTree.html
+--- a/aloha/aloha-query-ssr/www/WEB-INF/templates/registerTree.html	(revision 60e809f4234e4dc7c5f50e7ee0035caa57eb1c9b)
++++ b/aloha/aloha-query-ssr/www/WEB-INF/templates/registerTree.html	(revision e7a14bfcbec189cc313ed7bb5977cd188d04611f)
+@@ -66,7 +66,7 @@
+                         </button>
+                     </div>
+                     <div class="graph-preview-container">
+-                        <mermaid-chart id="preview-graph" chart="graph TB" class="wkwdnnxze"
++                        <mermaid-chart id="preview-graph" chart="graph TB" class="wkwdnnxze" edge-meta="[]"
+                             webc:attr="pivot=${pivot},hierarchy-schema=${hierarchySchema}">
+                             <div class="mermaid-chart">
+                                 <output>
+Index: aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterHierarchyViewController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterHierarchyViewController.java b/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterHierarchyViewController.java
+--- a/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterHierarchyViewController.java	(revision e7a14bfcbec189cc313ed7bb5977cd188d04611f)
++++ b/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterHierarchyViewController.java	(revision 0ab2aca861e89a106778ca41c03470d59a45b3d0)
+@@ -384,7 +384,6 @@
+         return fields;
+     }
+ 
+-    @SuppressWarnings({"unchecked", "rawtypes"})
+     private static HierarchyAttributeField toAttributeField(
+         StarView.Hierarchy.Read<?> hierarchy,
+         Field.Member.ofStarView.Attribute<?> member
+@@ -409,22 +408,22 @@
+         );
+     }
+ 
++    @SuppressWarnings({"unchecked", "rawtypes"})
+     private static String readAttributeValue(
+         StarView.Hierarchy.Read<?> hierarchy,
+         Field.Member.ofStarView.Attribute<?> member
+     ) {
+         if (member instanceof AbstractField.Member.Mandatory<?> mandatory) {
+-            Object val = hierarchy.mandatoryValue(f -> mandatory);
++            Object val = hierarchy.mandatoryValue(f -> (AbstractField.Member.Mandatory)mandatory);
+             return val == null ? "" : val.toString();
+         }
+         if (member instanceof AbstractField.Member.Optional<?> optional) {
+-            MayNullValue<?> val = hierarchy.optionalValue(f -> optional);
++            MayNullValue<?> val = hierarchy.optionalValue(f -> (AbstractField.Member.Optional)optional);
+             return val.apply(obj -> obj == null ? "" : obj.toString(), () -> "");
+         }
+         return "";
+     }
+ 
+-    @SuppressWarnings({"unchecked", "rawtypes"})
+     private static List<EnumOption> buildEnumOptions(Field.Member.ofStarView.Attribute<?> member) {
+         if (!AttributeRow.ForIdentifiableEnum.class.isAssignableFrom(member.attributeEntity())) {
+             return Collections.emptyList();
+Index: aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterTreeController.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterTreeController.java b/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterTreeController.java
+--- a/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterTreeController.java	(revision 0ab2aca861e89a106778ca41c03470d59a45b3d0)
++++ b/aloha/aloha-query-ssr/src/aloha3/controller/query/RegisterTreeController.java	(revision c916c3e7b7c0392269725813a10ca533223fcf3c)
+@@ -12,7 +12,6 @@
+ import aloha3.controller.tool.meta.AlohaCRUD;
+ import aloha3.controller.tool.meta.AlohaCRUD.GraphField;
+ import aloha3.controller.tool.meta.AlohaMeta;
+-import aloha3.controller.tool.meta.ParameterMappingTo;
+ import aloha3.controller.tool.meta.StringUtil;
+ import aloha3.module.function.business.conceptual.master.Graph;
+ import aloha3.module.object.model.read.Tree;
+@@ -43,6 +42,11 @@
+ import java.util.function.Function;
+ import java.util.stream.Collectors;
+ 
++import aloha.module.object.Type;
++
++import javax.json.JsonNumber;
++import javax.json.JsonString;
++
+ import static aloha3.controller.Server.conceptual;
+ import static aloha3.controller.Server.container;
+ import static aloha3.controller.Server.engine;
+@@ -215,18 +219,19 @@
+                 final var builder = hm.createArrowBuilder(from, to, DateTime.YMDHMS.current());
+                 final JsonObject attributes = jsonNode.getJsonObject("attributes");
+                 hm.arrowField().attributeMembers().foreach(attr -> {
+-                    final AbstractField.Member member = (AbstractField.Member) attr;
+-                    if (!hasAttributeValue(attributes, member)) {
++                    final Field.Member.ofStarView.Attribute<?> attribute =
++                        (Field.Member.ofStarView.Attribute<?>) attr;
++                    if (!hasAttributeValue(attributes, attribute)) {
++                        return;
++                    }
++                    Comparable<?> value = convertAttributeValue(attributes, attribute);
++                    if (value == null) {
+                         return;
+                     }
+-                    if (member instanceof AbstractField.Member.Mandatory vm) {
+-                        builder.setMandatoryValue(
+-                            f -> vm,
+-                            ParameterMappingTo.toComparable(attributes, vm));
+-                    } else if (member instanceof AbstractField.Member.Optional vo) {
+-                        builder.setOptionalValue(
+-                            f -> vo,
+-                            ParameterMappingTo.toComparable(attributes, vo));
++                    if (attribute instanceof AbstractField.Member.Mandatory vm) {
++                        builder.setMandatoryValue(f -> vm, value);
++                    } else if (attribute instanceof AbstractField.Member.Optional vo) {
++                        builder.setOptionalValue(f -> vo, value);
+                     } else {
+                         throw new RuntimeException("Never");
+                     }
+@@ -492,7 +497,7 @@
+             }).orElseGet(() -> child.coreRead().coreId() + "").toString();
+     }
+ 
+-    private static boolean hasAttributeValue(JsonObject attributes, AbstractField.Member attr) {
++    private static boolean hasAttributeValue(JsonObject attributes, Field.Member.ofStarView.Attribute<?> attr) {
+         if (attributes == null || attributes.isEmpty()) {
+             return false;
+         }
+@@ -559,6 +564,65 @@
+         return built.isEmpty() ? null : built;
+     }
+ 
++    @SuppressWarnings({"unchecked","rawtypes"})
++    private static Comparable<?> convertAttributeValue(
++        JsonObject attributes,
++        Field.Member.ofStarView.Attribute<?> member
++    ) {
++        JsonValue jsonValue = getAttributeJsonValue(attributes, member);
++        if (jsonValue == null || jsonValue.getValueType() == JsonValue.ValueType.NULL) {
++            return null;
++        }
++        if (AttributeRow.ForIdentifiableEnum.class.isAssignableFrom(member.attributeEntity())) {
++            AttributeRow.ForIdentifiableEnum<?> attr =
++                (AttributeRow.ForIdentifiableEnum<?>) Instance.of(member.attributeEntity());
++            String token = jsonValueToString(jsonValue);
++            if (token == null || token.isBlank()) {
++                return null;
++            }
++            return IdentifiableEnum.findBy(token.trim(), attr.enumClass());
++        }
++        String raw = jsonValueToString(jsonValue);
++        if (raw == null || raw.isBlank()) {
++            return null;
++        }
++        try {
++            return Type.toComparable(raw.trim(), member.refType());
++        } catch (RuntimeException ex) {
++            return raw.trim();
++        }
++    }
++
++    private static JsonValue getAttributeJsonValue(
++        JsonObject attributes,
++        Field.Member.ofStarView.Attribute<?> member
++    ) {
++        if (attributes == null || attributes.isEmpty()) {
++            return null;
++        }
++        final String decap = StringUtil.decapitalize(member.javaName());
++        if (attributes.containsKey(decap)) {
++            return attributes.get(decap);
++        }
++        if (attributes.containsKey(member.javaName())) {
++            return attributes.get(member.javaName());
++        }
++        return null;
++    }
++
++    private static String jsonValueToString(JsonValue value) {
++        if (value == null || value.getValueType() == JsonValue.ValueType.NULL) {
++            return null;
++        }
++        return switch (value.getValueType()) {
++            case STRING -> ((JsonString) value).getString();
++            case NUMBER -> ((JsonNumber) value).toString();
++            case TRUE -> "true";
++            case FALSE -> "false";
++            default -> value.toString();
++        };
++    }
++
+     @SuppressWarnings({"unchecked", "rawtypes"})
+     private static String readAttributeValue(
+         StarView.Hierarchy.Read<?> hierarchy,
+Index: aloha/aloha-query-ssr/www/assets/registerTree-modal.js
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/aloha/aloha-query-ssr/www/assets/registerTree-modal.js b/aloha/aloha-query-ssr/www/assets/registerTree-modal.js
+--- a/aloha/aloha-query-ssr/www/assets/registerTree-modal.js	(revision 0ab2aca861e89a106778ca41c03470d59a45b3d0)
++++ b/aloha/aloha-query-ssr/www/assets/registerTree-modal.js	(revision 4f814e4556a80a01d8ba422eef61cba1c276d585)
+@@ -33,6 +33,21 @@
+         alertBox.classList.add('is-visible');
+     };
+ 
++    const normalizeEnumValue = (initialValue, options = []) => {
++        if (!initialValue) {
++            return '';
++        }
++        const labelMatch = options.find(opt => opt.label === initialValue);
++        if (labelMatch) {
++            return labelMatch.label;
++        }
++        const idMatch = options.find(opt => opt.value === initialValue);
++        if (idMatch) {
++            return idMatch.label;
++        }
++        return initialValue;
++    };
++
+     const renderFields = (values = {}, schemaList = schema) => {
+         fieldContainer.innerHTML = '';
+         showAlert('');
+@@ -63,8 +78,9 @@
+                 control.appendChild(placeholder);
+                 field.options.forEach(opt => {
+                     const option = document.createElement('option');
+-                    option.value = opt.value;
++                    option.value = opt.label;
+                     option.textContent = opt.label;
++                    option.dataset.enumValue = opt.value;
+                     control.appendChild(option);
+                 });
+             } else {
+@@ -83,13 +99,19 @@
+ 
+             control.id = inputId;
+             control.dataset.field = field.field || field.name;
+-            control.value = values?.[field.field] ?? values?.[field.name] ?? '';
++            let initialValue = values?.[field.field] ?? values?.[field.name] ?? '';
++            if (field.enum && Array.isArray(field.options)) {
++                initialValue = normalizeEnumValue(initialValue, field.options);
++            }
++            control.value = initialValue;
+             if (!field.optional) {
+                 control.required = true;
+             }
+             if (field.fixed && control.value) {
+                 control.disabled = true;
+             }
++            control.dataset.dataType = String(field.dataType || '').toUpperCase();
++            control.dataset.isEnum = field.enum ? 'true' : 'false';
+ 
+             wrapper.appendChild(label);
+             wrapper.appendChild(control);
+@@ -100,19 +122,37 @@
+     const collectValues = () => {
+         const inputs = fieldContainer.querySelectorAll('[data-field]');
+         const attributes = {};
++        const numericTypes = new Set(['BYTE', 'INTEGER', 'LONG']);
++        const errors = [];
++
+         inputs.forEach(input => {
+             if (input.disabled) {
+-                if (input.value) {
+-                    attributes[input.dataset.field] = input.value.trim();
+-                }
+                 return;
+             }
+             const rawValue = input.value.trim();
+             if (!rawValue) {
+                 return;
+             }
++            if (input.dataset.isEnum === 'true') {
++                attributes[input.dataset.field] = rawValue;
++                return;
++            }
++            const dataType = (input.dataset.dataType || '').toUpperCase();
++            if (numericTypes.has(dataType)) {
++                const parsed = Number(rawValue);
++                if (!Number.isFinite(parsed)) {
++                    errors.push(`「${input.previousElementSibling?.textContent || input.dataset.field}」の値が数値として解釈できません`);
++                    return;
++                }
++                attributes[input.dataset.field] = parsed;
++                return;
++            }
+             attributes[input.dataset.field] = rawValue;
+         });
++        if (errors.length) {
++            showAlert(errors.join('\n'));
++            return null;
++        }
+         return attributes;
+     };
+ 
+@@ -173,6 +213,9 @@
+             return;
+         }
+         const attributes = collectValues();
++        if (attributes === null) {
++            return;
++        }
+         const success = await previewChart.updateEdgeAttributes(
+             currentDetail.sourceId,
+             currentDetail.targetId,
+Index: aloha/aloha-query-ssr/www/WEB-INF/templates/registerHierarchyView.html
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/aloha/aloha-query-ssr/www/WEB-INF/templates/registerHierarchyView.html b/aloha/aloha-query-ssr/www/WEB-INF/templates/registerHierarchyView.html
+--- a/aloha/aloha-query-ssr/www/WEB-INF/templates/registerHierarchyView.html	(revision 059ecaa1f31235e8d0bddb6f5a4e77f2db23fc72)
++++ b/aloha/aloha-query-ssr/www/WEB-INF/templates/registerHierarchyView.html	(revision 4f814e4556a80a01d8ba422eef61cba1c276d585)
+@@ -57,8 +57,8 @@
+                                     webc:disabled="${attr.immutable}">
+                                     <option value="">-- select --</option>
+                                     <option webc:each="opt : ${attr.options}"
+-                                            webc:value="${opt.value}"
+-                                            webc:selected="${opt.value} == ${attr.value}"
++                                            webc:value="${opt.label}"
++                                            webc:selected="${opt.label} == ${attr.value}"
+                                             webc:text="${opt.label}"></option>
+                                 </select>
+                                 <input type="hidden"
